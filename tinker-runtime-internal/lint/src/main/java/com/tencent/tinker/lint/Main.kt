@@ -1,7 +1,3 @@
-// TODO:
-//   Remove when Kotlin version is upgraded.
-@file:Suppress("CONTEXT_RECEIVERS_DEPRECATED")
-
 package com.tencent.tinker.lint
 
 import com.android.tools.lint.client.api.IssueRegistry
@@ -14,7 +10,6 @@ import com.android.tools.lint.detector.api.Issue
 import com.android.tools.lint.detector.api.JavaContext
 import com.android.tools.lint.detector.api.Scope
 import com.android.tools.lint.detector.api.Severity
-import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiMember
 import org.jetbrains.uast.UBinaryExpression
 import org.jetbrains.uast.UBlockExpression
@@ -148,9 +143,9 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         }
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private val PsiMember.processAnnotation: ProcessAnnotations?
-        get() = evaluator.getAnnotations(this).firstNotNullOfOrNull {
+        get() = context.evaluator.getAnnotations(this).firstNotNullOfOrNull {
             it.qualifiedName?.let(ProcessAnnotations::byClass)
         }
 
@@ -180,15 +175,15 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         }
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.checkCallIsInMainProcess() {
         if (isInValidMainProcessContext) {
             return
         }
-        report(
+        context.report(
             ISSUE_MAIN_PROCESS_ONLY,
             this,
-            getLocation(this),
+            context.getLocation(this),
             """
                 This member should only be called from a `@MainProcessOnly` annotated member, or
                 when `Context.isInMainProcess` returns `true`.
@@ -196,20 +191,20 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         )
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private val UCallExpression.isInValidMainProcessContext: Boolean
         get() = isInAnnotatedScope(ProcessAnnotations.MAIN_PROCESS_ONLY)
                 || isCheckedBy(ProcessCheckProperties.IS_IN_MAIN_PROCESS, true)
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.checkCallIsInDeployProcess() {
         if (isInValidDeployProcessContext) {
             return
         }
-        report(
+        context.report(
             ISSUE_DEPLOY_PROCESS_ONLY,
             this,
-            getLocation(this),
+            context.getLocation(this),
             """
                 This member should only be called from a `@DeployProcessOnly` annotated member, or
                 when `Context.isInDeployProcess` returns `true`.
@@ -217,20 +212,20 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         )
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private val UCallExpression.isInValidDeployProcessContext: Boolean
         get() = isInAnnotatedScope(ProcessAnnotations.DEPLOY_PROCESS_ONLY)
                 || isCheckedBy(ProcessCheckProperties.IS_IN_DEPLOY_PROCESS, true)
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.checkCallIsInNonDeployProcess() {
         if (isInValidNonDeployProcessContext) {
             return
         }
-        report(
+        context.report(
             ISSUE_NON_DEPLOY_PROCESS_ONLY,
             this,
-            getLocation(this),
+            context.getLocation(this),
             """
                 This member should only be called from a `@MainProcessOnly` annotated or
                 `@NonDeployProcessOnly` annotated member, or when `Context.isInMainProcess` returns
@@ -239,14 +234,14 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         )
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private val UCallExpression.isInValidNonDeployProcessContext: Boolean
         get() = isInAnnotatedScope(ProcessAnnotations.NON_DEPLOY_PROCESS_ONLY)
                 || isInAnnotatedScope(ProcessAnnotations.MAIN_PROCESS_ONLY)
                 || isCheckedBy(ProcessCheckProperties.IS_IN_DEPLOY_PROCESS, false)
                 || isCheckedBy(ProcessCheckProperties.IS_IN_MAIN_PROCESS, true)
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.isInAnnotatedScope(expected: ProcessAnnotations): Boolean {
         caller?.run {
             if (processAnnotation == expected) {
@@ -261,7 +256,7 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         return false
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.isCheckedBy(
         property: ProcessCheckProperties,
         expected: Boolean
@@ -279,7 +274,7 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
      * }
      * ```
      */
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UCallExpression.isInCheckBranch(
         property: ProcessCheckProperties,
         expected: Boolean
@@ -325,7 +320,7 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
      * expression()  // Expression is in the remaining code of the check.
      * ```
      */
-    context(JavaContext)
+    context(context: JavaContext)
     private tailrec fun UExpression.isInRemainingCodeOfReturnedCheck(
         property: ProcessCheckProperties,
         expected: Boolean
@@ -371,7 +366,7 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
         return blockParent.isInRemainingCodeOfReturnedCheck(property, expected)
     }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private val UExpression.isTerminated: Boolean
         get() = when (this) {
             is UReturnExpression, is UThrowExpression -> true
@@ -383,7 +378,7 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
             else -> false
         }
 
-    context(JavaContext)
+    context(context: JavaContext)
     private fun UExpression.booleanProperty(property: ProcessCheckProperties): Boolean? {
         return when (this) {
             // Expressions like `if (property)`.
@@ -442,12 +437,6 @@ class ProcessContextDetector : Detector(), Detector.UastScanner {
             else -> null
         }
     }
-
-    private val UExpression.typeName: String?
-        get() = getExpressionType()
-            ?.let { it as? PsiClassType }
-            ?.resolve()
-            ?.qualifiedName
 
     private fun UElement.isAncestorOf(node: UElement): Boolean {
         var current = node

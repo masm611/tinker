@@ -101,11 +101,16 @@ private val File.isZipFile: Boolean
         return magic.contentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
     }
 
+private class DeployResult(
+    val version: String,
+    val sourceDiffPackage: File,
+)
+
 @DeployProcessOnly
 private fun deployPatch(
     context: Context,
     intent: Intent,
-) {
+): DeployResult {
     val version = intent.getStringExtra(DEPLOY_IPC_KEY_VERSION)
         ?: throw Tinker.Error(
             Tinker.Error.Deploy.MISSING_VERSION,
@@ -156,6 +161,10 @@ private fun deployPatch(
         skipCheckingSignature = skipCheckingSignature,
         deployer = deployer,
     )
+    return DeployResult(
+        version = version,
+        sourceDiffPackage = diffPackage,
+    )
 }
 
 private const val DEPLOY_IPC_KEY_VERSION = "v"
@@ -170,27 +179,30 @@ class TinkerDeployService : Service() {
             infoLog(TAG) {
                 "Deploying request received. Start deploying."
             }
-            val (error, events) = traceTask("deploy") {
+            val (pair, events) = traceTask("deploy") {
                 try {
-                    expected<Tinker.Error.Deploy>("deploy patch") {
+                    val result = expected<Tinker.Error.Deploy, DeployResult>("deploy patch") {
                         deployPatch(this, intent)
                     }
-                    null
+                    result to null
                 } catch (error: Tinker.Error) {
                     if (error.type in errorTypeShouldBeThrown) {
                         throw error
                     }
-                    error
+                    null to error
                 }
             }
+            val (result, error) = pair
             application
                 .let { it as? Tinker.App }
                 ?.deployCallback
                 ?.apply {
                     onTaskComplete(
-                        Tinker.TaskSummary(
-                            error = error,
-                            events = events,
+                        Tinker.TaskSummary.Deploy(
+                            error,
+                            events,
+                            result?.version,
+                            result?.sourceDiffPackage,
                         )
                     )
                 }

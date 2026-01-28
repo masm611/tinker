@@ -6,7 +6,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.ServiceTestRule
 import com.tencent.tinker.Tinker
-import com.tencent.tinker.Tinker.code
 import com.tencent.tinker.internal.module.layout.PatchLayoutConstructorImpl
 import com.tencent.tinker.internal.patchDexApkFile
 import com.tencent.tinker.internal.patchDexDirectory
@@ -332,7 +331,7 @@ class PatchLayoutConstructorImplTest {
             )
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.Layout.INVALID_SOURCE.code,
+            Tinker.codeOfErrorType(Tinker.Error.Layout.INVALID_SOURCE),
             errorCode,
         )
     }
@@ -358,7 +357,7 @@ class PatchLayoutConstructorImplTest {
             )
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.Layout.INVALID_SOURCE.code,
+            Tinker.codeOfErrorType(Tinker.Error.Layout.INVALID_SOURCE),
             errorCode,
         )
     }
@@ -384,7 +383,7 @@ class PatchLayoutConstructorImplTest {
             )
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.Layout.INVALID_SOURCE.code,
+            Tinker.codeOfErrorType(Tinker.Error.Layout.INVALID_SOURCE),
             errorCode,
         )
     }
@@ -410,7 +409,7 @@ class PatchLayoutConstructorImplTest {
             )
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.Layout.INVALID_SOURCE.code,
+            Tinker.codeOfErrorType(Tinker.Error.Layout.INVALID_SOURCE),
             errorCode,
         )
     }

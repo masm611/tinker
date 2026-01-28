@@ -6,7 +6,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.ServiceTestRule
 import com.tencent.tinker.Tinker
-import com.tencent.tinker.Tinker.code
 import com.tencent.tinker.internal.module.patch.RawPatch
 import com.tencent.tinker.internal.module.patch.RawPatchManagerImpl
 import com.tencent.tinker.test.createTestDirectory
@@ -522,7 +521,7 @@ class RawPatchManagerImplTest {
             mainService.acquire()
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.RawPatch.HAS_ACQUIRED_PATCH.code,
+            Tinker.codeOfErrorType(Tinker.Error.RawPatch.HAS_ACQUIRED_PATCH),
             errorCode
         )
     }
@@ -549,7 +548,7 @@ class RawPatchManagerImplTest {
             mainService.acquire()
         }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.RawPatch.HAS_ACQUIRED_PATCH.code,
+            Tinker.codeOfErrorType(Tinker.Error.RawPatch.HAS_ACQUIRED_PATCH),
             errorCode
         )
     }
@@ -676,7 +675,7 @@ class RawPatchManagerImplTest {
             }?.tinkerErrorCode
         assertNotNull(errorCode)
         assertEquals(
-            Tinker.Error.RawPatch.CREATE_EXIST_PATCH.code,
+            Tinker.codeOfErrorType(Tinker.Error.RawPatch.CREATE_EXIST_PATCH),
             errorCode,
         )
     }
@@ -705,7 +704,7 @@ class RawPatchManagerImplTest {
                 )
             }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.RawPatch.CLONE_PATCH.code,
+            Tinker.codeOfErrorType(Tinker.Error.RawPatch.CLONE_PATCH),
             errorCode
         )
         // Cleans up the source directory.
@@ -738,7 +737,7 @@ class RawPatchManagerImplTest {
                 )
             }.tinkerErrorCode
         assertEquals(
-            Tinker.Error.RawPatch.WRITE_LATEST_VERSION.code,
+            Tinker.codeOfErrorType(Tinker.Error.RawPatch.WRITE_LATEST_VERSION),
             errorCode
         )
     }

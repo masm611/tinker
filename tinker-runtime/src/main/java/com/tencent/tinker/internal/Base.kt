@@ -94,3 +94,12 @@ internal val errorTypeShouldBeThrown by lazy {
         Tinker.Error.Load.UNRECOVERABLE_LOAD_FAILED.let(::add)
     }
 }
+
+internal val Context.filesShouldBeProtected: Array<File>
+    get() {
+        // For Tinker developers, this API should guarantee that: If any process returns a file, other processes should
+        // return the same file. Elements in the list can only be deleted when all processes have finished.
+        //
+        // For now, always return root directory.
+        return arrayOf(rootDirectory)
+    }

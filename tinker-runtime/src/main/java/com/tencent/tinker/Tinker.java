@@ -1,136 +1,111 @@
-package com.tencent.tinker
+package com.tencent.tinker;
 
-import android.app.Application
-import android.content.Context
-import android.content.res.Configuration
-import androidx.annotation.WorkerThread
-import com.tencent.tinker.Tinker.cleanAllPatches
-import com.tencent.tinker.Tinker.cleanObsoletePatches
-import com.tencent.tinker.Tinker.requestPatchAsUnavailable
-import com.tencent.tinker.internal.checkIfVersionIsValid
-import com.tencent.tinker.internal.clean.cleanAllPatchesByRemote
-import com.tencent.tinker.internal.clean.cleanObsoletePatchesByRemote
-import com.tencent.tinker.internal.clean.requestPatchAsUnavailable
-import com.tencent.tinker.internal.deploy.deployPatchByRemote
-import com.tencent.tinker.internal.deploy.legacy.globalCustomLegacyMerger
-import com.tencent.tinker.internal.load.load
-import com.tencent.tinker.internal.util.globalLogLevel
-import com.tencent.tinker.internal.util.globalLogger
-import com.tencent.tinker.internal.util.isInDeployProcess
-import com.tencent.tinker.internal.util.use
-import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
+import android.app.Application;
+import android.content.Context;
+import android.content.res.Configuration;
+import android.util.Log;
 
-@Suppress("unused")
-object Tinker {
+import com.tencent.tinker.internal.BaseKt;
+import com.tencent.tinker.internal.clean.CleanKt;
+import com.tencent.tinker.internal.deploy.DeployKt;
+import com.tencent.tinker.internal.deploy.legacy.LegacyKt;
+import com.tencent.tinker.internal.load.LoadKt;
+import com.tencent.tinker.internal.util.LogKt;
+import com.tencent.tinker.internal.util.TraceKt;
+
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.List;
+
+@SuppressWarnings({"unused", "NullableProblems", "JavadocReference"})
+public final class Tinker {
 
     /**
      * Logger used to print log messages.
      */
-    interface Logger {
+    public static abstract class Logger {
 
         /**
-         * Log a [message] with [tag] and [priority].
+         * Gets filter log level. All log messages with level lower than {@code level} will be ignored.
+         * <p>
          */
-        fun log(
-            priority: Int,
-            tag: String,
-            message: String,
-        )
-    }
+        public int filterLogLevel() {
+            return Log.VERBOSE;
+        }
 
-    /**
-     * Set logger implementation.
-     */
-    @JvmStatic
-    fun setLogger(logger: Logger) {
-        globalLogger = logger
-    }
-
-    /**
-     * Set log level. All log messages with level lower than [level] will be ignored.
-     */
-    @JvmStatic
-    fun setLogLevel(level: Int) {
-        globalLogLevel = level
+        /**
+         * Logs a {@code message} with {@code tag} and {@code priority}.
+         */
+        public abstract void log(int priority, String tag, String message);
     }
 
     /**
      * Merger used to generate patched data from base data and diff data.
-     *
+     * <p>
      * The API will be deprecated once new patch format is ready.
      */
     // TODO: Deprecate legacy merger once new patch format is ready.
-    interface LegacyMerger {
+    public interface LegacyMerger {
 
         /**
-         * Merge base data from [baseInput] and diff data from [diffInput] to patched data, and write to
-         * [patchedOutput].
+         * Merge base data from {@code baseInput} and diff data from {@code diffInput} to patched data, and write to
+         * {@code patchedOutput}.
          */
-        fun merge(
-            baseInput: InputStream,
-            diffInput: InputStream,
-            patchedOutput: OutputStream,
-        )
-    }
-
-    /**
-     * Set custom legacy merger implementation.
-     *
-     * The API will be deprecated once new patch format is ready.
-     */
-    // TODO: Deprecate legacy merger once new patch format is ready.
-    @JvmStatic
-    fun setCustomLegacyMerger(merger: LegacyMerger) {
-        globalCustomLegacyMerger = merger
+        void merge(InputStream baseInput, InputStream diffInput, OutputStream patchedOutput);
     }
 
     /**
      * Error which is raised by Tinker.
      */
-    class Error internal constructor(
+    public static final class Error extends Exception {
+
+        public interface Type {
+            int groupCode();
+        }
+
+        private final Type mType;
+
         /**
          * Type of the error.
          */
-        val type: Type,
+        public Type getType() {
+            return mType;
+        }
+
+        private final String mMessage;
 
         /**
          * Message of the error.
          */
-        override val message: String,
+        public String getMessage() {
+            return mMessage;
+        }
 
-        /**
-         * Throwable which causes the error has occurred. It may be null if the error is not caused by a throwable.
-         */
-        cause: Throwable? = null,
-    ) : Exception(message, cause) {
+        public Error(Type type, String message) {
+            super(message, null);
+            mType = type;
+            mMessage = message;
+        }
 
-        /**
-         * Type of the error.
-         *
-         * Each error type can be represented by a unique 32-bit unsigned integer code getting by calling [Tinker.code].
-         * A code consists of two parts:
-         *
-         * - The higher 16 bits represent the group of error type.
-         * - The lower 16 bits represent the index of error type in its group.
-         */
-        sealed interface Type {
-            val groupCode: Int
+        public Error(Type type, String message, Throwable cause) {
+            super(message, cause);
+            mType = type;
+            mMessage = message;
         }
 
         /**
          * Error type groups of unexpected error, which may be caused by faulty code design.
-         *
+         * <p>
          * If errors with these types are raised, please report to developers via
          * [GitHub Issues](https://github.com/Tencent/tinker/issues/new).
          */
-        object Unexpected {
+        public static final class Unexpected {
 
             /**
              * Error type group of calling trace functions incorrectly.
              */
-            enum class Trace : Type {
+            public enum Trace implements Type {
                 /**
                  * Type of error caused by raised unexpected throwable.
                  */
@@ -141,15 +116,17 @@ object Tinker {
                  */
                 TRACE_TASK_INSIDE_A_TASK;
 
-                override val groupCode: Int
-                    get() = 0x0100
+                @Override
+                public int groupCode() {
+                    return 0x0100;
+                }
             }
         }
 
         /**
          * Error type group of error caused by patch loading.
          */
-        enum class Load : Type {
+        public enum Load implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -157,7 +134,7 @@ object Tinker {
 
             /**
              * Type of error caused by unrecoverable failed patch loading.
-             *
+             * <p>
              * Error with this type is always thrown as an uncaught exception. Once error with this type is thrown, the
              * process is in an unrecoverable damaged state and must be stopped immediately to prevent unexpected
              * behavior.
@@ -174,13 +151,15 @@ object Tinker {
              */
             CAST_FAILED;
 
-            override val groupCode: Int
-                get() = 0x1000
+            @Override
+            public int groupCode() {
+                return 0x1000;
+            }
 
             /**
              * Error type group of error caused by patched code loading.
              */
-            enum class Code : Type {
+            public enum Code implements Type {
                 /**
                  * Type of error caused by raised unexpected throwable.
                  */
@@ -206,40 +185,46 @@ object Tinker {
                  */
                 VERIFY_FAILED;
 
-                override val groupCode: Int
-                    get() = 0x1100
+                @Override
+                public int groupCode() {
+                    return 0x1100;
+                }
 
                 /**
                  * Error type group of error caused by patched code loading with inject-path strategy.
                  */
-                enum class InjectPath : Type {
+                public enum InjectPath implements Type {
                     /**
                      * Type of error caused by raised unexpected throwable.
                      */
                     UNEXPECTED;
 
-                    override val groupCode: Int
-                        get() = 0x1110
+                    @Override
+                    public int groupCode() {
+                        return 0x1110;
+                    }
                 }
 
                 /**
                  * Error type group of error caused by patched code loading with new-class-loader strategy.
                  */
-                enum class NewClassLoader : Type {
+                public enum NewClassLoader implements Type {
                     /**
                      * Type of error caused by raised unexpected throwable.
                      */
                     UNEXPECTED;
 
-                    override val groupCode: Int
-                        get() = 0x1120
+                    @Override
+                    public int groupCode() {
+                        return 0x1120;
+                    }
                 }
             }
 
             /**
              * Error type group of error caused by patched resource loading.
              */
-            enum class Resource : Type {
+            public enum Resource implements Type {
                 /**
                  * Type of error caused by raised unexpected throwable.
                  */
@@ -255,15 +240,17 @@ object Tinker {
                  */
                 VERIFY_FAILED;
 
-                override val groupCode: Int
-                    get() = 0x1200
+                @Override
+                public int groupCode() {
+                    return 0x1200;
+                }
             }
         }
 
         /**
          * Error type group of error caused by patch deploying.
          */
-        enum class Deploy : Type {
+        public enum Deploy implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -284,13 +271,15 @@ object Tinker {
              */
             INVALID_DIFF_PACKAGE;
 
-            override val groupCode: Int
-                get() = 0x2000
+            @Override
+            public int groupCode() {
+                return 0x2000;
+            }
 
             /**
              * Error type group of error caused by legacy patch deploying.
              */
-            enum class Legacy : Type {
+            public enum Legacy implements Type {
                 /**
                  * Type of error caused by raised unexpected throwable.
                  */
@@ -316,13 +305,15 @@ object Tinker {
                  */
                 CHECK_SIGNATURE_FAILED;
 
-                override val groupCode: Int
-                    get() = 0x2100
+                @Override
+                public int groupCode() {
+                    return 0x2100;
+                }
 
                 /**
                  * Error type group of error caused by legacy patch dex deploying.
                  */
-                enum class Dex : Type {
+                public enum Dex implements Type {
                     /**
                      * Type of error caused by raised unexpected throwable.
                      */
@@ -373,14 +364,16 @@ object Tinker {
                      */
                     NO_DEPLOYED_DEX;
 
-                    override val groupCode: Int
-                        get() = 0x2110
+                    @Override
+                    public int groupCode() {
+                        return 0x2110;
+                    }
                 }
 
                 /**
                  * Error type group of error caused by legacy patch library deploying.
                  */
-                enum class Library : Type {
+                public enum Library implements Type {
                     /**
                      * Type of error caused by raised unexpected throwable.
                      */
@@ -416,14 +409,16 @@ object Tinker {
                      */
                     INVALID_DEPLOY_RESULT;
 
-                    override val groupCode: Int
-                        get() = 0x2120
+                    @Override
+                    public int groupCode() {
+                        return 0x2120;
+                    }
                 }
 
                 /**
                  * Error type group of error caused by legacy patch resource deploying.
                  */
-                enum class Resource : Type {
+                public enum Resource implements Type {
                     /**
                      * Type of error caused by raised unexpected throwable.
                      */
@@ -464,8 +459,10 @@ object Tinker {
                      */
                     INVALID_DEPLOY_RESULT;
 
-                    override val groupCode: Int
-                        get() = 0x2130
+                    @Override
+                    public int groupCode() {
+                        return 0x2130;
+                    }
                 }
             }
         }
@@ -473,7 +470,7 @@ object Tinker {
         /**
          * Error type group of error caused by patch cleaning.
          */
-        enum class Clean : Type {
+        public enum Clean implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -489,14 +486,16 @@ object Tinker {
              */
             INVALID_STRATEGY;
 
-            override val groupCode: Int
-                get() = 0x3000
+            @Override
+            public int groupCode() {
+                return 0x3000;
+            }
         }
 
         /**
          * Error type group of error caused by raw patch management.
          */
-        enum class RawPatch : Type {
+        public enum RawPatch implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -582,14 +581,16 @@ object Tinker {
              */
             RECOVER_PATCH_WRITE_PERMISSION;
 
-            override val groupCode: Int
-                get() = 0x4000
+            @Override
+            public int groupCode() {
+                return 0x4000;
+            }
         }
 
         /**
          * Error type group of error caused by OAT file management.
          */
-        enum class Oat : Type {
+        public enum Oat implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -605,14 +606,16 @@ object Tinker {
              */
             GENERATE_OR_STORE_FAILED;
 
-            override val groupCode: Int
-                get() = 0x5000
+            @Override
+            public int groupCode() {
+                return 0x5000;
+            }
         }
 
         /**
          * Error type group of error caused by patch layout management.
          */
-        enum class Layout : Type {
+        public enum Layout implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -623,14 +626,16 @@ object Tinker {
              */
             INVALID_SOURCE;
 
-            override val groupCode: Int
-                get() = 0x6000
+            @Override
+            public int groupCode() {
+                return 0x6000;
+            }
         }
 
         /**
          * Error type group of error caused by validation.
          */
-        enum class Validate : Type {
+        public enum Validate implements Type {
             /**
              * Type of error caused by raised unexpected throwable.
              */
@@ -651,325 +656,525 @@ object Tinker {
              */
             VALIDATE_FAILED;
 
-            override val groupCode: Int
-                get() = 0x7000
+            @Override
+            public int groupCode() {
+                return 0x7000;
+            }
         }
     }
 
     /**
-     * Gets code of error type. See [Error.Type] for more details.
+     * Gets code of error type. See {@link Error.Type} for more details.
      */
-    @get:JvmStatic
-    @get:JvmName("codeOfErrorType")
-    val <T : Error.Type> T.code: Int
-        get() = (groupCode shl 16) or (this as Enum<*>).ordinal
+    public static int codeOfErrorType(Error.Type type) {
+        return (type.groupCode() << 16) | ((Enum<?>) type).ordinal();
+    }
 
     /**
      * Event of the traced task procedure.
      */
-    class TraceEvent internal constructor(
+    public static final class TraceEvent {
+        private final String mName;
+
         /**
          * Name of the event.
          */
-        val name: String,
+        public String getName() {
+            return mName;
+        }
+
+        private final int mPid;
 
         /**
          * PID of the process which the procedure is running on.
          */
-        val pid: Int,
+        public int getPid() {
+            return mPid;
+        }
+
+        private final int mTid;
 
         /**
          * TID of the thread which the procedure is running on.
          */
-        val tid: Int,
+        public int getTid() {
+            return mTid;
+        }
+
+        private final long mTimestamp;
 
         /**
          * Start time since boot of the procedure in microseconds.
          */
-        val timestamp: Long,
+        public long getTimestamp() {
+            return mTimestamp;
+        }
+
+        private final long mDuration;
 
         /**
          * Duration of the procedure in microseconds.
          */
-        val duration: Long,
-    )
+        public long getDuration() {
+            return mDuration;
+        }
+
+        public TraceEvent(String name, int pid, int tid, long timestamp, long duration) {
+            mName = name;
+            mPid = pid;
+            mTid = tid;
+            mTimestamp = timestamp;
+            mDuration = duration;
+        }
+    }
 
     /**
      * Dumps trace events as
-     * [Chromium JSON trace format](https://perfetto.dev/docs/getting-started/other-formats#chrome-json-format)
-     * to [file].
+     * <a href="https://perfetto.dev/docs/getting-started/other-formats#chrome-json-format">Chromium JSON trace format</a>
+     * to {@code file}.
      */
-    @WorkerThread
-    @JvmStatic
-    @JvmName("dumpTraceEventsToFile")
-    fun Iterable<TraceEvent>.dumpToFile(file: File) {
-        val events = toList()
-        file.bufferedWriter().use { writer ->
-            writer.write("{")
-            writer.write("\"traceEvents\":[")
-            events.forEachIndexed { index, event ->
-                if (index == 0) {
-                    writer.write("{")
-                } else {
-                    writer.write(",{")
-                }
-                writer.write("\"ph\":\"X\",")
-                writer.write("\"name\":\"${event.name}\",")
-                writer.write("\"pid\":${event.pid},")
-                writer.write("\"tid\":${event.tid},")
-                writer.write("\"ts\":${event.timestamp},")
-                writer.write("\"dur\":${event.duration}")
-                writer.write("}")
-            }
-            writer.write("]")
-            writer.write("}")
-        }
+    public static void dumpTraceEventsToFile(Iterable<TraceEvent> events, File file) {
+        TraceKt.dumpToFile(events, file);
+    }
+
+    /**
+     * A helper method to get files which should be protected by users.
+     * <p>
+     * Since Tinker is implemented based on file system, key files are required to be protected by Tinker users. Files
+     * or directories returned by this method cannot be modified or deleted <b>in current process</b>.
+     * <p>
+     * Tinker guarantees that, within the same process, returned result will always be content-equal. But it is not
+     * guaranteed that returned result is content-equal between different processes.
+     */
+    public static File[] filesShouldBeProtected(Context context) {
+        return BaseKt.getFilesShouldBeProtected(context);
     }
 
     /**
      * Summary of the task.
      */
-    class TaskSummary internal constructor(
+    public static abstract class TaskSummary {
+
+        private final Error mError;
+
         /**
-         * Error raised during task. If task is successful, [error] is `null`.
+         * Error raised during task. If task is successful, returned value is `null`.
          */
-        val error: Error?,
+        public Error getError() {
+            return mError;
+        }
+
+        private final List<TraceEvent> mEvents;
 
         /**
          * Event of traced task procedures.
-         *
-         * If [system tracing](https://developer.android.com/topic/performance/tracing) is enabled, events are also
-         * recorded as system trace events.
+         * <p>
+         * If <a href="https://developer.android.com/topic/performance/tracing">system tracing</a> is enabled, events
+         * are also recorded as system trace events.
          */
-        val events: List<TraceEvent>,
-    ) {
+        public List<TraceEvent> getEvents() {
+            return mEvents;
+        }
+
+        public TaskSummary(Error error, List<TraceEvent> events) {
+            mError = error;
+            mEvents = events;
+        }
+
         /**
          * Whether the task is successful.
          */
-        val success: Boolean
-            get() = error == null
+        public boolean isSuccess() {
+            return mError == null;
+        }
+
+        /**
+         * Summary of load task.
+         */
+        public static class Load extends TaskSummary {
+
+            private final String mVersion;
+
+            /**
+             * Version of patch loaded by current process.
+             * <p>
+             * If none of patch is loaded, returned value is `null`.
+             */
+            public String getVersion() {
+                return mVersion;
+            }
+
+            private final File mPatchDirectory;
+
+            /**
+             * Directory of patch loaded by current process.
+             * <p>
+             * Depending on implementation, this directory may be non-writable. Never try to modify contents of this
+             * directory.
+             * <p>
+             * If none of patch is loaded, returned value is `null`.
+             */
+            public File getPatchDirectory() {
+                return mPatchDirectory;
+            }
+
+            public Load(Error error, List<TraceEvent> events, String version, File patchDirectory) {
+                super(error, events);
+                mVersion = version;
+                mPatchDirectory = patchDirectory;
+            }
+        }
+
+        /**
+         * Summary of deploy task.
+         */
+        public static class Deploy extends TaskSummary {
+
+            private final String mVersion;
+
+            /**
+             * Version of deployed patch.
+             * <p>
+             * If deploy task is failed, returned value is `null`.
+             */
+            public String getVersion() {
+                return mVersion;
+            }
+
+            private final File mSourceDiffPackage;
+
+            /**
+             * Diff package which triggered this deploy task.
+             * <p>
+             * If deploy task is failed, returned value is `null`.
+             */
+            public File getSourceDiffPackage() {
+                return mSourceDiffPackage;
+            }
+
+            public Deploy(Error error, List<TraceEvent> events, String version, File sourceDiffPackage) {
+                super(error, events);
+                mVersion = version;
+                mSourceDiffPackage = sourceDiffPackage;
+            }
+        }
+
+        /**
+         * Summary of clean task.
+         */
+        public static class Clean extends TaskSummary {
+            private final List<String> mVersions;
+
+            /**
+             * Gets cleaned patch versions.
+             */
+            public List<String> getVersions() {
+                return mVersions;
+            }
+
+            public Clean(Error error, List<TraceEvent> events, List<String> versions) {
+                super(error, events);
+                mVersions = versions;
+            }
+        }
     }
 
     /**
      * Callback to notify the result of task.
      */
-    interface Callback {
+    public interface Callback<T extends TaskSummary> {
 
         /**
          * Once the task is complete, this function will be called.
          */
-        fun onTaskComplete(summary: TaskSummary)
+        void onTaskComplete(T summary);
     }
 
     /**
      * The application base class for setting up Tinker.
-     *
+     * <p>
      * Following these steps to set up Tinker:
-     *
-     * - Create a subclass of [AppLike], which we refer it as "delegate application class" in the following text, and
-     *   move all implementation code of original [Application] into created delegate application class. The subclass
-     *   must have a public constructor with only single parameter typed as [Application]. This constructor is only used
-     *   for creating delegate application class.
-     * - Use a subclass of [App] as replacement of original [Application], which we refer it as "application class" in
-     *   the following text. Because all classes accessed by application class are "non-patchable", it is recommended
-     *   to write as less code as possible to application class.
-     * - Returns the name of created delegate application class in [App.appLikeClassName] in application class.
-     *
-     * If implementing [App] by self and overriding [Application.attachBaseContext], make sure
-     * `super.attachBaseContext(base)` is called before any other code.
+     * <ul>
+     * <li>
+     * Create a subclass of {@link AppLike}, which we refer it as "delegate application class" in the following text,
+     * and move all implementation code of original {@link Application} into created delegate application class. The
+     * subclass must have a public constructor with only single parameter typed as {@link Application}. This constructor
+     * is only used for creating delegate application class.
+     * </li>
+     * <li>
+     * Use a subclass of {@link App} as replacement of original {@link Application}, which we refer it as "application
+     * class" in the following text. Because all classes accessed by application class are "non-patchable", it is
+     * recommended to write as less code as possible to application class.
+     * </li>
+     * <li>
+     * Returns the name of created delegate application class in {@link App#getAppLikeClassName} in application class.
+     * </li>
+     * </ul>
+     * <p>
+     * If implementing {@link App} by self and overriding {@link Application#attachBaseContext}, make sure
+     * <code>super.attachBaseContext(base)</code> is called before any other code.
      */
-    abstract class App : Application() {
+    public static abstract class App extends Application {
 
         /**
-         * Gets class name of delegate class implementing [AppLike] which is used for current application.
-         *
+         * Whether to disable loading patch for current process.
+         */
+        public boolean getDisabled() {
+            return false;
+        }
+
+        /**
+         * Gets class name of delegate class implementing {@link AppLike} which is used for current application.
+         * <p>
          * Always implement this property by returning a string constant value, instead of getting name by class
          * instance, which causes class loading.
-         *
-         * If the property returns `null`, none of delegate class is used.
+         * <p>
+         * If the property returns <code>null</code>, none of delegate class is used.
          */
-        abstract val appLikeClassName: String?
+        public String getAppLikeClassName() {
+            return "com.tencent.tinker.Tinker.AppLike";
+        }
+
+        /**
+         * Gets logger implementation.
+         * <p>
+         * If {@code null} is returned, default logger implementation is used.
+         */
+        public Logger getLogger() {
+            return null;
+        }
+
+        /**
+         * Gets custom legacy merger implementation.
+         * <p>
+         * The API will be deprecated once new patch format is ready.
+         */
+        // TODO: Deprecate legacy merger once new patch format is ready.
+        public LegacyMerger getCustomLegacyMerger() {
+            return null;
+        }
 
         /**
          * Gets callback of patch loading task.
-         *
+         * <p>
          * The callback is called in patch loading process.
          */
-        open val loadCallback: Callback?
-            get() = null
+        public Callback<TaskSummary.Load> getLoadCallback() {
+            return null;
+        }
 
         /**
          * Gets callback of patch deploying task.
-         *
+         * <p>
          * The callback is only called in patch deploying process.
          */
-        open val deployCallback: Callback?
-            get() = null
+        public Callback<TaskSummary.Deploy> getDeployCallback() {
+            return null;
+        }
 
         /**
          * Gets callback of patch cleaning task.
-         *
+         * <p>
          * The callback is only called in patch deploying process.
          */
-        open val cleanCallback: Callback?
-            get() = null
+        public Callback<TaskSummary.Clean> getCleanCallback() {
+            return null;
+        }
 
         /**
          * Whether to skip validating patch files while loading, which may speed up loading if application is huge.
          * However, patch files may be corrupted if application code modifies patch files unexpectedly.
          */
-        open val skipValidating: Boolean
-            get() = false
+        public boolean skipValidating() {
+            return false;
+        }
 
         /**
          * Whether current application is hardening. Tinker will try to use special strategy for loading hardening
          * application.
          */
-        open val hardening: Boolean
-            get() = false
+        public boolean hardening() {
+            return false;
+        }
 
-        private var appLike = null as AppLike?
+        private AppLike mAppLike = null;
 
-        override fun attachBaseContext(base: Context) {
-            super.attachBaseContext(base)
-            val appLikeClassLoader = if (!isInDeployProcess) {
-                load(
-                    hardening = hardening,
-                    skipValidating = skipValidating,
-                    callback = loadCallback,
-                ) ?: classLoader
-            } else {
-                classLoader
+        @Override
+        protected void attachBaseContext(Context base) {
+            super.attachBaseContext(base);
+            final Logger logger = getLogger();
+            if (logger != null) {
+                LogKt.setGlobalLogger(logger);
             }
-            // Do not catch any throwable while creating delegate application class. It should be fail-fast if user
-            // provides an invalid delegate application class name.
-            appLike = appLikeClassName
-                ?.let {
-                    appLikeClassLoader.loadClass(it)
-                }
-                ?.getConstructor(Application::class.java)
-                ?.newInstance(this)
-                ?.let {
-                    it as AppLike
-                }
-            appLike?.attachBaseContext(base)
+            final LegacyMerger legacyMerger = getCustomLegacyMerger();
+            if (legacyMerger != null) {
+                LegacyKt.setGlobalCustomLegacyMerger(legacyMerger);
+            }
+            mAppLike = LoadKt.load(this, hardening(), skipValidating());
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.attachBaseContext(base);
+            }
         }
 
-        override fun onCreate() {
-            super.onCreate()
-            appLike?.onCreate()
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.onCreate();
+            }
         }
 
-        override fun onTerminate() {
-            super.onTerminate()
-            appLike?.onTerminate()
+        @Override
+        public void onTerminate() {
+            super.onTerminate();
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.onTerminate();
+            }
         }
 
-        override fun onLowMemory() {
-            super.onLowMemory()
-            appLike?.onLowMemory()
+        @Override
+        public void onLowMemory() {
+            super.onLowMemory();
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.onLowMemory();
+            }
         }
 
-        override fun onTrimMemory(level: Int) {
-            super.onTrimMemory(level)
-            appLike?.onTrimMemory(level)
+        @Override
+        public void onTrimMemory(int level) {
+            super.onTrimMemory(level);
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.onTrimMemory(level);
+            }
         }
 
-        override fun onConfigurationChanged(newConfig: Configuration) {
-            super.onConfigurationChanged(newConfig)
-            appLike?.onConfigurationChanged(newConfig)
+        @Override
+        public void onConfigurationChanged(Configuration newConfig) {
+            super.onConfigurationChanged(newConfig);
+            final AppLike appLike = mAppLike;
+            if (appLike != null) {
+                appLike.onConfigurationChanged(newConfig);
+            }
         }
     }
 
     /**
-     * A delegate of [Application] to make sure that as less as possible classes are loaded before Tinker patch is
+     * A delegate of {@link Application} to make sure that as less as possible classes are loaded before Tinker patch is
      * loaded.
-     *
-     * See [App] for more details on how to set up Tinker.
+     * <p>
+     * See {@link App} for more details on how to set up Tinker.
      */
-    abstract class AppLike(val application: Application) {
+    public static class AppLike {
+
+        private final Application mApplication;
+
+        public Application getApplication() {
+            return mApplication;
+        }
+
+        public AppLike(Application application) {
+            mApplication = application;
+        }
 
         /**
-         * See [Application.attachBaseContext].
+         * See {@link Application#attachBaseContext}.
          */
-        open fun attachBaseContext(base: Context) {}
+        public void attachBaseContext(Context base) {
+        }
 
         /**
-         * See [Application.onCreate].
+         * See {@link Application#onCreate}.
          */
-        open fun onCreate() {}
+        public void onCreate() {
+        }
 
         /**
-         * See [Application.onTerminate].
+         * See {@link Application#onTerminate}.
          */
-        open fun onTerminate() {}
+        public void onTerminate() {
+        }
 
         /**
-         * See [Application.onLowMemory].
+         * See {@link Application#onLowMemory}.
          */
-        open fun onLowMemory() {}
+        public void onLowMemory() {
+        }
 
         /**
-         * See [Application.onTrimMemory].
+         * See {@link Application#onTrimMemory}.
          */
-        open fun onTrimMemory(level: Int) {}
+        public void onTrimMemory(int level) {
+        }
 
         /**
-         * See [Application.onConfigurationChanged].
+         * See {@link Application#onConfigurationChanged}.
          */
-        open fun onConfigurationChanged(newConfig: Configuration) {}
+        public void onConfigurationChanged(Configuration newConfig) {
+        }
     }
 
     /**
-     * Asks Tinker to create a patch with provided [version] and [diffPackage].
-     *
-     * If [skipCheckingSignature], Tinker will treat diff package is trusted, otherwise, diff package should have same
-     * signature as base apk file.
+     * Asks Tinker to create a patch with provided {@code} and {@code diffPackage}.
+     * <p>
+     * If {@code skipCheckingSignature}, Tinker will treat diff package is trusted, otherwise, diff package should have
+     * same signature as base apk file.
      */
-    @JvmStatic
-    @JvmOverloads
-    fun deployPatch(
-        context: Context,
-        version: String,
-        diffPackage: File,
-        skipCheckingSignature: Boolean = false,
+    public static void deployPatch(
+            Context context,
+            String version,
+            File diffPackage,
+            boolean skipCheckingSignature
     ) {
-        checkIfVersionIsValid(version)
-        context.deployPatchByRemote(version, diffPackage, skipCheckingSignature)
+        BaseKt.checkIfVersionIsValid(version);
+        DeployKt.deployPatchByRemote(context, version, diffPackage, skipCheckingSignature);
+    }
+
+    /**
+     * Asks Tinker to create a patch with provided {@code version} and {@code diffPackage}.
+     */
+    public static synchronized void deployPatch(
+            Context context,
+            String version,
+            File diffPackage
+    ) {
+        deployPatch(context, version, diffPackage, false);
     }
 
     /**
      * Asks Tinker to clean all patches **except patches are in use**.
-     *
+     * <p>
      * For cleaning using patches, using processes should be terminated, and a new patch should be deployed to
-     * overwrite, or using [requestPatchAsUnavailable] to mark patch as unavailable, so that the process does not use
-     * target patch when it starts again.
+     * overwrite, or using {@code requestPatchAsUnavailable} to mark patch as unavailable, so that the process does not
+     * use target patch when it starts again.
      */
-    @JvmStatic
-    fun cleanAllPatches(context: Context) {
-        context.cleanAllPatchesByRemote()
+    public static void cleanAllPatches(Context context) {
+        CleanKt.cleanAllPatchesByRemote(context);
     }
 
     /**
      * Asks Tinker to clean obsolete patches **except patches are in use**.
-     *
-     * Different from [cleanAllPatches], latest version is kept, unless latest version is marked as unavailable.
+     * <p>
+     * Different from {@link Tinker#cleanAllPatches}, latest version is kept, unless latest version is marked as
+     * unavailable.
      */
-    @JvmStatic
-    fun cleanObsoletePatches(context: Context) {
-        context.cleanObsoletePatchesByRemote()
+    public static void cleanObsoletePatches(Context context) {
+        CleanKt.cleanObsoletePatchesByRemote(context);
     }
 
     /**
      * Requests Tinker marks provided patch version as unavailable to clean up this patch, and does not provide this
      * patch anymore.
-     *
+     * <p>
      * If marking current using patch as unavailable, the patch is still unable to be cleaned up until the process is
-     * terminated. See [cleanAllPatches] or [cleanObsoletePatches].
+     * terminated. See {@link Tinker#cleanAllPatches} or {@link Tinker#cleanObsoletePatches}.
      */
-    @JvmStatic
-    fun requestPatchAsUnavailable(context: Context, version: String) {
-        checkIfVersionIsValid(version)
-        context.requestPatchAsUnavailable(version)
+    public static void requestPatchAsUnavailable(Context context, String version) {
+        BaseKt.checkIfVersionIsValid(version);
+        CleanKt.requestPatchAsUnavailable(context, version);
     }
 }

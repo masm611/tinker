@@ -39,7 +39,7 @@ private fun cleanPatches(
     context: Context,
     strategy: Strategy,
     rawPatchManager: RawPatchManager = RawPatchManager.with(context),
-) {
+): List<String> {
     val cleaned = traceE("clean.clean(strategy = ${strategy.key})") {
         when (strategy) {
             Strategy.CLEAN_ALL -> rawPatchManager.cleanAll()
@@ -47,13 +47,14 @@ private fun cleanPatches(
         }
     }
     cleanOatDirectories(context, cleaned)
+    return cleaned.map { it.version }
 }
 
 @DeployProcessOnly
 private fun cleanPatches(
     context: Context,
     intent: Intent,
-) {
+): List<String> {
     val strategyIndex = intent.getIntExtra(CLEAN_IPC_KEY_STRATEGY, -1)
     if (strategyIndex == -1) {
         throw Tinker.Error(
@@ -69,7 +70,7 @@ private fun cleanPatches(
     debugLog(TAG) {
         "Cleaning patches with strategy \"${strategy.name.lowercase()}\"."
     }
-    cleanPatches(context, strategy)
+    return cleanPatches(context, strategy)
 }
 
 private const val CLEAN_IPC_KEY_STRATEGY = "s"
@@ -87,27 +88,29 @@ class TinkerCleanService : Service() {
             infoLog(TAG) {
                 "Cleaning request received. Start cleaning."
             }
-            val (error, events) = traceTask("clean") {
+            val (pair, events) = traceTask("clean") {
                 try {
-                    expected<Tinker.Error.Clean>("clean patch") {
+                    val versions = expected<Tinker.Error.Clean, List<String>>("clean patch") {
                         cleanPatches(this, intent)
                     }
-                    null
+                    versions to null
                 } catch (error: Tinker.Error) {
                     if (error.type in errorTypeShouldBeThrown) {
                         throw error
                     }
-                    error
+                    null to error
                 }
             }
+            val (versions, error) = pair
             application
                 .let { it as? Tinker.App }
                 ?.cleanCallback
                 ?.apply {
                     onTaskComplete(
-                        Tinker.TaskSummary(
-                            error = error,
-                            events = events,
+                        Tinker.TaskSummary.Clean(
+                            error,
+                            events,
+                            versions,
                         )
                     )
                 }
@@ -148,6 +151,7 @@ internal fun Context.cleanObsoletePatchesByRemote() {
         .let(::startService)
 }
 
+@JvmOverloads
 internal fun Context.requestPatchAsUnavailable(
     version: String,
     rawPatchManager: RawPatchManager = RawPatchManager.with(this),

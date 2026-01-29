@@ -1,18 +1,12 @@
-import com.tencent.tinker.build.config.tinkerBuildConfig
-
 plugins {
     alias(libs.plugins.android.library)
     jacoco
     `maven-publish`
     alias(libs.plugins.tinker.build.config)
-    alias(libs.plugins.tinker.runtime.build.helper)
+    alias(libs.plugins.tinker.runtime.build.config)
 }
 
 description = "Tinker Android runtime."
-
-tinkerBuildConfig {
-    publishVariant("productionRelease")
-}
 
 android {
     namespace = "com.tencent.tinker"
@@ -25,16 +19,6 @@ android {
         debug {
             enableUnitTestCoverage = true
             enableAndroidTestCoverage = true
-        }
-    }
-    flavorDimensions.add("tinkerType")
-    productFlavors {
-        create("production") {
-            dimension = "tinkerType"
-            isDefault = true
-        }
-        create("independent") {
-            dimension = "tinkerType"
         }
     }
     testCoverage {
@@ -50,7 +34,7 @@ android {
 dependencies {
     transformImplementation(libs.androidx.annotation)
     transformImplementation(kotlin("stdlib"))
-    implementation(project(":tinker-commons"))
+    transformImplementation(project(":tinker-commons"))
     testImplementation(kotlin("stdlib"))
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

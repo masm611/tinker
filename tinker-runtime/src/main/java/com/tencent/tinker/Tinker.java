@@ -891,6 +891,93 @@ public final class Tinker {
     }
 
     /**
+     * Config class for testing Tinker V2 with legacy Tinker.
+     * <p>
+     * TODO: Remove this interface when test is complete.
+     */
+    public interface AppConfig {
+
+        /**
+         * Whether to disable loading patch for current process.
+         */
+        boolean getDisabled();
+
+        /**
+         * Gets class name of delegate class implementing {@link AppLike} which is used for current application.
+         * <p>
+         * Always implement this property by returning a string constant value, instead of getting name by class
+         * instance, which causes class loading.
+         * <p>
+         * If the property returns <code>null</code>, none of delegate class is used.
+         */
+        String getAppLikeClassName();
+
+        /**
+         * Gets logger implementation.
+         * <p>
+         * If {@code null} is returned, default logger implementation is used.
+         */
+        Logger getLogger();
+
+        /**
+         * Gets custom legacy merger implementation.
+         * <p>
+         * The API will be deprecated once new patch format is ready.
+         */
+        // TODO: Deprecate legacy merger once new patch format is ready.
+        LegacyMerger getCustomLegacyMerger();
+
+        /**
+         * Gets callback of patch loading task.
+         * <p>
+         * The callback is called in patch loading process.
+         */
+        Callback<TaskSummary.Load> getLoadCallback();
+
+        /**
+         * Gets callback of patch deploying task.
+         * <p>
+         * The callback is only called in patch deploying process.
+         */
+        Callback<TaskSummary.Deploy> getDeployCallback();
+
+        /**
+         * Gets callback of patch cleaning task.
+         * <p>
+         * The callback is only called in patch deploying process.
+         */
+        Callback<TaskSummary.Clean> getCleanCallback();
+
+        /**
+         * Whether to skip validating patch files while loading, which may speed up loading if application is huge.
+         * However, patch files may be corrupted if application code modifies patch files unexpectedly.
+         */
+        boolean skipValidating();
+
+        /**
+         * Whether current application is hardening. Tinker will try to use special strategy for loading hardening
+         * application.
+         */
+        boolean hardening();
+    }
+
+    public static AppLike legacyAttachBaseContext(
+            Application application,
+            Context baseContext,
+            AppConfig appConfig
+    ) {
+        final AppLike appLike = LoadKt.legacyLoad(
+                application,
+                appConfig.hardening(),
+                appConfig.skipValidating()
+        );
+        if (appLike != null) {
+            appLike.attachBaseContext(baseContext);
+        }
+        return appLike;
+    }
+
+    /**
      * The application base class for setting up Tinker.
      * <p>
      * Following these steps to set up Tinker:
@@ -914,11 +1001,12 @@ public final class Tinker {
      * If implementing {@link App} by self and overriding {@link Application#attachBaseContext}, make sure
      * <code>super.attachBaseContext(base)</code> is called before any other code.
      */
-    public static abstract class App extends Application {
+    public static abstract class App extends Application implements AppConfig {
 
         /**
          * Whether to disable loading patch for current process.
          */
+        @Override
         public boolean getDisabled() {
             return false;
         }
@@ -931,6 +1019,7 @@ public final class Tinker {
          * <p>
          * If the property returns <code>null</code>, none of delegate class is used.
          */
+        @Override
         public String getAppLikeClassName() {
             return "com.tencent.tinker.Tinker.AppLike";
         }
@@ -940,6 +1029,7 @@ public final class Tinker {
          * <p>
          * If {@code null} is returned, default logger implementation is used.
          */
+        @Override
         public Logger getLogger() {
             return null;
         }
@@ -950,6 +1040,7 @@ public final class Tinker {
          * The API will be deprecated once new patch format is ready.
          */
         // TODO: Deprecate legacy merger once new patch format is ready.
+        @Override
         public LegacyMerger getCustomLegacyMerger() {
             return null;
         }
@@ -959,6 +1050,7 @@ public final class Tinker {
          * <p>
          * The callback is called in patch loading process.
          */
+        @Override
         public Callback<TaskSummary.Load> getLoadCallback() {
             return null;
         }
@@ -968,6 +1060,7 @@ public final class Tinker {
          * <p>
          * The callback is only called in patch deploying process.
          */
+        @Override
         public Callback<TaskSummary.Deploy> getDeployCallback() {
             return null;
         }
@@ -977,6 +1070,7 @@ public final class Tinker {
          * <p>
          * The callback is only called in patch deploying process.
          */
+        @Override
         public Callback<TaskSummary.Clean> getCleanCallback() {
             return null;
         }
@@ -985,6 +1079,7 @@ public final class Tinker {
          * Whether to skip validating patch files while loading, which may speed up loading if application is huge.
          * However, patch files may be corrupted if application code modifies patch files unexpectedly.
          */
+        @Override
         public boolean skipValidating() {
             return false;
         }
@@ -993,6 +1088,7 @@ public final class Tinker {
          * Whether current application is hardening. Tinker will try to use special strategy for loading hardening
          * application.
          */
+        @Override
         public boolean hardening() {
             return false;
         }

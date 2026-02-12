@@ -194,7 +194,7 @@ class TinkerDeployService : Service() {
             }
             val (result, error) = pair
             application
-                .let { it as? Tinker.App }
+                .let { it as? Tinker.AppConfig }
                 ?.deployCallback
                 ?.apply {
                     onTaskComplete(

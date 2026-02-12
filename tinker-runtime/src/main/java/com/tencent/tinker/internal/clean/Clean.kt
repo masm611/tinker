@@ -103,7 +103,7 @@ class TinkerCleanService : Service() {
             }
             val (versions, error) = pair
             application
-                .let { it as? Tinker.App }
+                .let { it as? Tinker.AppConfig }
                 ?.cleanCallback
                 ?.apply {
                     onTaskComplete(

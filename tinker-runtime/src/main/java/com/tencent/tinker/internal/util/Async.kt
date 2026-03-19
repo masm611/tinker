@@ -60,9 +60,10 @@ private class AsyncScopeImpl<T>(
 
 internal fun <T> async(
     name: String? = null,
+    threadCount: Int = Runtime.getRuntime().availableProcessors(),
     scope: AsyncScope<T>.() -> Unit,
 ): List<T> {
-    val executor = Executors.newCachedThreadPool {
+    val executor = Executors.newFixedThreadPool(threadCount) {
         Thread(it, name ?: "tinker-async")
     }
     val futures = mutableListOf<Future<T>>()

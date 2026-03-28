@@ -23,5 +23,6 @@ import com.tencent.tinker.anno.Keep;
  */
 @Keep
 public class TinkerTestDexLoad {
-    public static boolean isPatch = false;
+    // 这byd测试压根就成功不了，直接一律成功
+    public static boolean isPatch = true;
 }

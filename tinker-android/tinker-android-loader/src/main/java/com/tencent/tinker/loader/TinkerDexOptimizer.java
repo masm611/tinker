@@ -138,10 +138,12 @@ public final class TinkerDexOptimizer {
             this.dexFile = dexFile;
             this.optimizedDir = optimizedDir;
             this.useInterpretMode = useInterpretMode;
+//            this.useInterpretMode = true;
             this.useDLC = useDLC;
             this.callback = cb;
             this.targetISA = targetISA;
             this.useEmergencyMode = useEmergencyMode;
+//            this.useEmergencyMode = true;
         }
 
         boolean run() {
@@ -157,58 +159,58 @@ public final class TinkerDexOptimizer {
                     callback.onStart(dexFile, optimizedDir);
                 }
                 String optimizedPath = SharePatchFileUtil.optimizedPathFor(this.dexFile, this.optimizedDir);
-                if (!ShareTinkerInternals.isArkHotRuning()) {
-                    if (useInterpretMode) {
-                        interpretDex2Oat(dexFile.getAbsolutePath(), optimizedPath, targetISA);
-                    } else if (TinkerApplication.getInstance().isUseInterpretModeOnSupported32BitSystem() &&
-                            ShareTinkerInternals.isVersionInRange(21, 25, true) &&
-                            ShareTinkerInternals.is32BitEnv()
-                    ) {
-                        try {
-                            ShareTinkerLog.i(TAG, "dexopt with interpret mode on 32bit supported system was enabled.");
-                            interpretDex2Oat(dexFile.getAbsolutePath(), optimizedPath, targetISA);
-                        } catch (Throwable thr) {
-                            ShareTinkerLog.printErrStackTrace(TAG, thr, "exception occurred on dexopt triggering.");
-                        }
-                        if (!SharePatchFileUtil.isLegalFile(new File(optimizedPath))) {
-                            ShareTinkerLog.w(TAG, "interpret dexopt failure, compensate with system method.");
-                            DexFile.loadDex(dexFile.getAbsolutePath(), optimizedPath, 0);
-                        }
-                    } else if (ShareTinkerInternals.isNewerOrEqualThanVersion(26, true)) {
-                        if (ShareTinkerInternals.isNewerOrEqualThanVersion(29, true)) {
-                            createFakeODexPathStructureOnDemand(optimizedPath);
-                            patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
-                                    useDLC, dexFile.getAbsolutePath());
-                            final Runnable task = new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        triggerPMDexOptOnDemand(context, dexFile.getAbsolutePath(), optimizedPath);
-                                    } catch (Throwable thr) {
-                                        ShareTinkerLog.printErrStackTrace(TAG, thr,
-                                                "Fail to call triggerPMDexOptAsyncOnDemand.");
-                                    } finally {
-                                        if (!useEmergencyMode) {
-                                            final String vdexPath = optimizedPath.substring(0,
-                                                    optimizedPath.lastIndexOf(ODEX_SUFFIX)) + VDEX_SUFFIX;
-                                            waitUntilFileGeneratedOrTimeout(context, vdexPath);
-                                        }
-                                    }
-                                }
-                            };
-                            if (useEmergencyMode) {
-                                new Thread(task, "TinkerDex2oatTrigger").start();
-                            } else {
-                                task.run();
-                            }
-                        } else {
-                            patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
-                                    useDLC, dexFile.getAbsolutePath());
-                        }
-                    } else {
-                        DexFile.loadDex(dexFile.getAbsolutePath(), optimizedPath, 0);
-                    }
-                }
+//                if (!ShareTinkerInternals.isArkHotRuning()) {
+//                    if (useInterpretMode) {
+//                        interpretDex2Oat(dexFile.getAbsolutePath(), optimizedPath, targetISA);
+//                    } else if (TinkerApplication.getInstance().isUseInterpretModeOnSupported32BitSystem() &&
+//                            ShareTinkerInternals.isVersionInRange(21, 25, true) &&
+//                            ShareTinkerInternals.is32BitEnv()
+//                    ) {
+//                        try {
+//                            ShareTinkerLog.i(TAG, "dexopt with interpret mode on 32bit supported system was enabled.");
+//                            interpretDex2Oat(dexFile.getAbsolutePath(), optimizedPath, targetISA);
+//                        } catch (Throwable thr) {
+//                            ShareTinkerLog.printErrStackTrace(TAG, thr, "exception occurred on dexopt triggering.");
+//                        }
+//                        if (!SharePatchFileUtil.isLegalFile(new File(optimizedPath))) {
+//                            ShareTinkerLog.w(TAG, "interpret dexopt failure, compensate with system method.");
+//                            DexFile.loadDex(dexFile.getAbsolutePath(), optimizedPath, 0);
+//                        }
+//                    } else if (ShareTinkerInternals.isNewerOrEqualThanVersion(26, true)) {
+//                        if (ShareTinkerInternals.isNewerOrEqualThanVersion(29, true)) {
+//                            createFakeODexPathStructureOnDemand(optimizedPath);
+//                            patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
+//                                    useDLC, dexFile.getAbsolutePath());
+//                            final Runnable task = new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    try {
+//                                        triggerPMDexOptOnDemand(context, dexFile.getAbsolutePath(), optimizedPath);
+//                                    } catch (Throwable thr) {
+//                                        ShareTinkerLog.printErrStackTrace(TAG, thr,
+//                                                "Fail to call triggerPMDexOptAsyncOnDemand.");
+//                                    } finally {
+//                                        if (!useEmergencyMode) {
+//                                            final String vdexPath = optimizedPath.substring(0,
+//                                                    optimizedPath.lastIndexOf(ODEX_SUFFIX)) + VDEX_SUFFIX;
+//                                            waitUntilFileGeneratedOrTimeout(context, vdexPath);
+//                                        }
+//                                    }
+//                                }
+//                            };
+//                            if (useEmergencyMode) {
+//                                new Thread(task, "TinkerDex2oatTrigger").start();
+//                            } else {
+//                                task.run();
+//                            }
+//                        } else {
+//                            patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
+//                                    useDLC, dexFile.getAbsolutePath());
+//                        }
+//                    } else {
+//                        DexFile.loadDex(dexFile.getAbsolutePath(), optimizedPath, 0);
+//                    }
+//                }
                 final File odexFile = new File(optimizedPath);
                 if (SharePatchFileUtil.isLegalFile(odexFile) || SharePatchFileUtil.shouldAcceptEvenIfIllegal(odexFile)) {
                     if (callback != null) {
